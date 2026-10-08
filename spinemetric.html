@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SpineMetric — Scoliosis Quantification</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #EEF1F4;
+    --panel: #FFFFFF;
+    --border: #DEE3E8;
+    --border-strong: #C7CFD7;
+    --text-primary: #1A2530;
+    --text-muted: #64748B;
+    --text-faint: #98A5B3;
+
+    --accent: #0E6E82;
+    --accent-dark: #0A5163;
+    --accent-soft: #E3F1F2;
+    --accent-soft-border: #BFDEE1;
+
+    --viewport-bg: #14181C;
+    --viewport-line: #2C343B;
+
+    --mild-fg:#15803D;  --mild-bg:#E3F6E9;   --mild-bd:#BFE8CC;
+    --mod-fg:#B45309;   --mod-bg:#FDF1DD;    --mod-bd:#F3D8A6;
+    --sev-fg:#B91C1C;   --sev-bg:#FBE7E7;    --sev-bd:#F0C4C4;
+
+    --shadow-sm: 0 1px 2px rgba(20,30,40,0.05);
+    --shadow-md: 0 6px 20px rgba(20,30,40,0.07);
+    --radius-lg: 16px;
+    --radius-md: 12px;
+    --radius-sm: 8px;
+  }
+
+  *{ box-sizing:border-box; }
+
+  html,body{
+    margin:0; padding:0;
+    background:var(--bg);
+    color:var(--text-primary);
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .app{ min-height:100vh; display:flex; flex-direction:column; }
+
+  /* ---------- Top nav ---------- */
+  .topnav{
+    height:64px; flex-shrink:0;
+    background:var(--panel);
+    border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 28px;
+  }
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .brand svg{ display:block; }
+  .brand-name{
+    font-size:17px; font-weight:700; letter-spacing:-0.01em; color:var(--text-primary);
+  }
+  .brand-name span{ color:var(--accent); }
+  .brand-tag{
+    font-size:11px; color:var(--text-faint); font-weight:500;
+    border-left:1px solid var(--border); padding-left:10px; margin-left:2px;
+    letter-spacing:.02em;
+  }
+
+  .status{
+    display:flex; align-items:center; gap:8px;
+    font-size:13px; font-weight:500; color:var(--text-muted);
+    background:#F5F7F9; border:1px solid var(--border);
+    padding:6px 12px 6px 10px; border-radius:999px;
+  }
+  .status-dot{
+    width:7px; height:7px; border-radius:50%;
+    background:var(--text-faint);
+    transition:background .3s ease;
+  }
+  .status-dot.active{ background:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+  .status-dot.error{ background:#B91C1C; box-shadow:0 0 0 3px #FBE7E7; }
+  .status-dot.ready{ background:#15803D; box-shadow:0 0 0 3px #E3F6E9; }
+
+  /* ---------- Main layout ---------- */
+  .main{
+    flex:1;
+    display:grid;
+    grid-template-columns: minmax(320px, 440px) 1fr;
+    gap:24px;
+    padding:28px;
+    max-width:1360px;
+    width:100%;
+    margin:0 auto;
+    align-items:start;
+  }
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius-lg);
+    box-shadow:var(--shadow-sm);
+    padding:22px;
+  }
+
+  .panel-title{
+    font-size:13px; font-weight:600; text-transform:uppercase; letter-spacing:.06em;
+    color:var(--text-muted); margin:0 0 4px 0;
+  }
+  .panel-subtitle{
+    font-size:13px; color:var(--text-faint); margin:0 0 18px 0;
+  }
+
+  /* ---------- Upload / preview panel ---------- */
+  .dropzone{
+    position:relative;
+    border:2px dashed var(--border-strong);
+    border-radius:var(--radius-md);
+    aspect-ratio: 3/4;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px;
+    cursor:pointer;
+    text-align:center;
+    padding:24px;
+    background-image: radial-gradient(var(--border) 1px, transparent 1px);
+    background-size:18px 18px;
+    background-position:center;
+    transition: border-color .2s ease, background-color .2s ease;
+  }
+  .dropzone:hover, .dropzone.drag{
+    border-color:var(--accent);
+    background-color:var(--accent-soft);
+  }
+  .dropzone:focus-visible{
+    outline:2px solid var(--accent); outline-offset:3px;
+  }
+  .upload-icon{
+    width:46px; height:46px;
+    color:var(--text-faint);
+  }
+  .dropzone:hover .upload-icon, .dropzone.drag .upload-icon{ color:var(--accent); }
+
+  .dz-title{ font-size:14.5px; font-weight:600; color:var(--text-primary); }
+  .dz-sub{ font-size:12.5px; color:var(--text-faint); max-width:220px; line-height:1.5; }
+  .dz-browse{ font-size:12.5px; color:var(--accent); font-weight:600; }
+
+  input[type=file]{ display:none; }
+
+  /* image viewport, appears after upload */
+  .viewport{
+    display:none;
+    position:relative;
+    background:var(--viewport-bg);
+    border-radius:var(--radius-md);
+    aspect-ratio: 3/4;
+    overflow:hidden;
+  }
+  .viewport.show{ display:flex; align-items:center; justify-content:center; }
+  .viewport img{
+    max-width:100%; max-height:100%;
+    filter: grayscale(1) contrast(1.05);
+    display:block;
+  }
+  .viewport::after{
+    content:"";
+    position:absolute; inset:0;
+    background:
+      linear-gradient(var(--viewport-line) 1px, transparent 1px) 0 0/100% 25%,
+      linear-gradient(90deg, var(--viewport-line) 1px, transparent 1px) 0 0/25% 100%;
+    opacity:.25;
+    pointer-events:none;
+  }
+  .corner{
+    position:absolute; width:18px; height:18px;
+    border-color:rgba(255,255,255,.55);
+    pointer-events:none;
+  }
+  .corner.tl{ top:10px; left:10px; border-top:2px solid; border-left:2px solid; }
+  .corner.tr{ top:10px; right:10px; border-top:2px solid; border-right:2px solid; }
+  .corner.bl{ bottom:10px; left:10px; border-bottom:2px solid; border-left:2px solid; }
+  .corner.br{ bottom:10px; right:10px; border-bottom:2px solid; border-right:2px solid; }
+
+  .scan-label{
+    position:absolute; top:10px; left:34px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:10.5px; letter-spacing:.03em;
+    color:rgba(255,255,255,.7);
+  }
+
+  .file-row{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-top:14px; font-size:12.5px; color:var(--text-muted);
+  }
+  .file-row .fname{ font-weight:500; color:var(--text-primary); }
+  .replace-btn{
+    background:none; border:none; color:var(--accent); font-weight:600;
+    font-size:12.5px; cursor:pointer; padding:0;
+  }
+  .replace-btn:hover{ text-decoration:underline; }
+
+  /* ---------- Results panel ---------- */
+  .results-header{
+    display:flex; align-items:baseline; justify-content:space-between; margin-bottom:18px;
+  }
+
+  .metrics-grid{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap:16px;
+  }
+
+  .metric-card{
+    position:relative;
+    background:#FBFCFD;
+    border:1px solid var(--border);
+    border-radius:var(--radius-md);
+    padding:18px 18px 16px;
+    transition:opacity .25s ease, transform .25s ease;
+  }
+  .metric-card.empty{ opacity:.5; }
+
+  .metric-label{
+    font-size:12px; font-weight:600; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--text-muted);
+    display:flex; align-items:center; gap:6px;
+  }
+  .metric-symbol{
+    font-family:'JetBrains Mono',monospace; color:var(--accent); font-size:12.5px;
+  }
+
+  .metric-value-row{
+    display:flex; align-items:baseline; gap:6px; margin-top:10px;
+  }
+  .metric-value{
+    font-family:'JetBrains Mono',monospace;
+    font-size:30px; font-weight:600; letter-spacing:-0.01em;
+    color:var(--text-primary); font-variant-numeric:tabular-nums;
+  }
+  .metric-unit{
+    font-size:12.5px; color:var(--text-faint); font-weight:500;
+  }
+
+  .badge{
+    position:absolute; top:16px; right:16px;
+    font-size:10.5px; font-weight:700; letter-spacing:.03em; text-transform:uppercase;
+    padding:3px 9px; border-radius:999px;
+    border:1px solid transparent;
+  }
+  .badge.minimal{ color:var(--accent-dark); background:var(--accent-soft); border-color:var(--accent-soft-border); }
+  .badge.mild{ color:var(--mild-fg); background:var(--mild-bg); border-color:var(--mild-bd); }
+  .badge.moderate{ color:var(--mod-fg); background:var(--mod-bg); border-color:var(--mod-bd); }
+  .badge.severe{ color:var(--sev-fg); background:var(--sev-bg); border-color:var(--sev-bd); }
+
+  .footnote{
+    margin-top:18px; padding-top:14px; border-top:1px solid var(--border);
+    font-size:11.5px; color:var(--text-faint); line-height:1.6;
+  }
+
+  @media (max-width: 880px){
+    .main{ grid-template-columns:1fr; }
+  }
+
+  /* ---------- v2 additions ---------- */
+  .disclaimer{
+    background:#FFF8E6; border-bottom:1px solid #F3D8A6; color:#8A5A0B;
+    font-size:12.5px; font-weight:500; text-align:center; padding:7px 16px;
+  }
+  .banner{
+    display:none; margin-bottom:16px; padding:12px 14px;
+    background:var(--mod-bg); border:1px solid var(--mod-bd); color:var(--mod-fg);
+    border-radius:var(--radius-md); font-size:13px; line-height:1.5;
+  }
+  .banner.show{ display:block; }
+
+  .analyzing{
+    position:absolute; inset:0; z-index:3; display:none;
+    flex-direction:column; align-items:center; justify-content:center; gap:10px;
+    background:rgba(20,24,28,.6); color:#fff; font-size:13px; font-weight:500;
+  }
+  .analyzing.show{ display:flex; }
+  .spinner{
+    width:30px; height:30px; border-radius:50%;
+    border:3px solid rgba(255,255,255,.25); border-top-color:#22D3EE;
+    animation:spin .8s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  .row-actions{ display:flex; gap:14px; }
+  .replace-btn:disabled{ color:var(--text-faint); cursor:not-allowed; text-decoration:none; }
+
+  .scale{
+    margin-bottom:18px; padding:16px 18px;
+    background:#FBFCFD; border:1px solid var(--border); border-radius:var(--radius-md);
+  }
+  .scale-head{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px; }
+  .scale-title{ font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); }
+  .scale-value{ font-family:'JetBrains Mono',monospace; font-size:12.5px; color:var(--text-primary); }
+  .scale-track{ position:relative; display:flex; height:10px; border-radius:999px; }
+  .seg{ flex:1; }
+  .seg:first-child{ border-radius:999px 0 0 999px; }
+  .seg:nth-child(4){ border-radius:0 999px 999px 0; }
+  .s-min{ background:#8CC7CF; } .s-mild{ background:#7CCB95; }
+  .s-mod{ background:#F0B95E; } .s-sev{ background:#E37B7B; }
+  .pointer{
+    display:none; position:absolute; top:-5px; width:4px; height:20px; margin-left:-2px;
+    background:var(--text-primary); border-radius:2px; border:1px solid #fff;
+    transition:left .5s ease;
+  }
+  .scale-labels{ display:flex; margin-top:8px; font-size:11.5px; font-weight:600; color:var(--text-muted); }
+  .scale-labels span{ flex:1; text-align:center; }
+  .scale-ticks{ position:relative; height:14px; margin-top:2px; font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text-faint); }
+  .scale-ticks span{ position:absolute; transform:translateX(-50%); }
+  .scale-note{ margin:6px 0 0; font-size:11px; color:var(--text-faint); }
+
+  .metric-hint{ margin-top:6px; font-size:11px; color:var(--text-faint); }
+  .approx{
+    font-size:9.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+    color:var(--mod-fg); background:var(--mod-bg); border:1px solid var(--mod-bd);
+    padding:1px 6px; border-radius:999px; cursor:help; margin-left:2px;
+  }
+
+  details.how{
+    margin-top:18px; border:1px solid var(--border); border-radius:var(--radius-md);
+    background:#FBFCFD; padding:12px 16px; font-size:13px; color:var(--text-muted); line-height:1.6;
+  }
+  details.how summary{ cursor:pointer; font-weight:600; color:var(--text-primary); }
+  details.how code{
+    font-family:'JetBrains Mono',monospace; background:var(--accent-soft);
+    color:var(--accent-dark); padding:1px 6px; border-radius:6px;
+  }
+  details.how ol{ margin:8px 0 0; padding-left:18px; }
+
+  /* file row layout fix */
+  .file-row{ flex-direction:column; align-items:stretch; gap:8px; }
+  .file-line{ display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .row-actions{ flex-wrap:wrap; gap:6px 18px; }
+  .replace-btn{ white-space:nowrap; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topnav">
+    <div class="brand">
+      <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+        <path d="M8 3 C 8 6, 18 6, 18 9 C 18 12, 8 12, 8 15 C 8 18, 18 18, 18 21"
+              stroke="#0E6E82" stroke-width="2" stroke-linecap="round" fill="none"/>
+        <circle cx="8" cy="3" r="1.6" fill="#0E6E82"/>
+        <circle cx="18" cy="9" r="1.6" fill="#0E6E82"/>
+        <circle cx="8" cy="15" r="1.6" fill="#0E6E82"/>
+        <circle cx="18" cy="21" r="1.6" fill="#0E6E82"/>
+      </svg>
+      <div class="brand-name">Spine<span>Metric</span></div>
+      <div class="brand-tag">CURVATURE ANALYSIS</div>
+    </div>
+    <div class="status">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Awaiting scan</span>
+    </div>
+  </div>
+
+  <div class="disclaimer">Research prototype · provisional severity bands · not a diagnostic tool. Images are processed by your own local server.</div>
+
+  <div class="main">
+
+    <!-- LEFT: upload / preview -->
+    <div class="panel">
+      <p class="panel-title">Radiograph</p>
+      <p class="panel-subtitle">Upload a posteroanterior spine X-ray</p>
+
+      <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload X-ray image">
+        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3v13"/>
+          <path d="M7 8l5-5 5 5"/>
+          <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+        </svg>
+        <div class="dz-title">Drag &amp; drop X-ray image</div>
+        <div class="dz-sub">DICOM export, JPEG or PNG accepted</div>
+        <div class="dz-browse">Browse files</div>
+      </div>
+
+      <div class="viewport" id="viewport">
+        <div class="scan-label">PA · RAW</div>
+        <div class="corner tl"></div>
+        <div class="corner tr"></div>
+        <div class="corner bl"></div>
+        <div class="corner br"></div>
+        <img id="preview" alt="Uploaded X-ray preview">
+        <div class="analyzing" id="analyzing"><div class="spinner"></div><span>Analyzing…</span></div>
+      </div>
+
+      <div class="file-row" id="fileRow" style="display:none;">
+        <span class="file-line" id="fileLine">File: <span class="fname" id="fname">—</span></span>
+        <span class="row-actions">
+          <button class="replace-btn" id="overlayBtn" disabled>Hide overlay</button>
+          <button class="replace-btn" id="downloadBtn" disabled>Download result</button>
+          <button class="replace-btn" id="replaceBtn">Replace image</button>
+        </span>
+      </div>
+      <input type="file" id="fileInput" accept="image/*">
+    </div>
+
+    <!-- RIGHT: results -->
+    <div class="panel">
+      <div class="results-header">
+        <div>
+          <p class="panel-title" style="margin-bottom:2px;">Analysis Results</p>
+          <p class="panel-subtitle" style="margin-bottom:0;">Automated curvature &amp; Cobb angle quantification</p>
+        </div>
+      </div>
+
+      <div class="banner" id="banner"></div>
+
+      <div class="scale" id="scale">
+        <div class="scale-head"><span class="scale-title">Severity scale</span><span class="scale-value" id="scaleValue">—</span></div>
+        <div class="scale-track">
+          <div class="seg s-min"></div><div class="seg s-mild"></div><div class="seg s-mod"></div><div class="seg s-sev"></div>
+          <div class="pointer" id="scalePointer"></div>
+        </div>
+        <div class="scale-labels"><span>Minimal</span><span>Mild</span><span>Moderate</span><span>Severe</span></div>
+        <div class="scale-ticks"><span id="tick1" style="left:25%"></span><span id="tick2" style="left:50%"></span><span id="tick3" style="left:75%"></span></div>
+        <p class="scale-note">Bands are drawn equal width for readability. Cutoffs are provisional.</p>
+      </div>
+
+      <div class="metrics-grid">
+
+        <div class="metric-card empty" id="card-sigma">
+          <span class="badge mild" id="severityBadge" style="display:none;">Mild</span>
+          <div class="metric-label"><span class="metric-symbol">σ</span> Sigma Coefficient</div>
+          <div class="metric-value-row"><span class="metric-value" id="val-sigma">—</span><span class="metric-unit">0–1</span></div>
+          <div class="metric-hint">0 = straight spine, higher = more curved</div>
+        </div>
+
+        <div class="metric-card empty" id="card-cobb">
+          <div class="metric-label">Est. Cobb's Angle <span class="approx" title="Rough estimate from the fitted curve's tangent angles. Not validated against manual Cobb measurements.">approx.</span></div>
+          <div class="metric-value-row"><span class="metric-value" id="val-cobb">—</span><span class="metric-unit">deg</span></div>
+          <div class="metric-hint">Confirm with manual measurement</div>
+        </div>
+
+        <div class="metric-card empty" id="card-s">
+          <div class="metric-label"><span class="metric-symbol">s</span> Arc Length</div>
+          <div class="metric-value-row"><span class="metric-value" id="val-s">—</span><span class="metric-unit">px</span></div>
+        </div>
+
+        <div class="metric-card empty" id="card-d">
+          <div class="metric-label"><span class="metric-symbol">d</span> Straight-line Distance</div>
+          <div class="metric-value-row"><span class="metric-value" id="val-d">—</span><span class="metric-unit">px</span></div>
+        </div>
+
+        <div class="metric-card empty" id="card-ratio">
+          <div class="metric-label"><span class="metric-symbol">d/s</span> Straightness Ratio</div>
+          <div class="metric-value-row"><span class="metric-value" id="val-ratio">—</span><span class="metric-unit">1 = straight</span></div>
+        </div>
+
+        <div class="metric-card empty" id="card-n">
+          <div class="metric-label">Vertebrae Detected</div>
+          <div class="metric-value-row"><span class="metric-value" id="val-n">—</span><span class="metric-unit">of ~17</span></div>
+          <div class="metric-hint">Much fewer or more than 12–17 lowers confidence</div>
+        </div>
+
+      </div>
+
+      <details class="how">
+        <summary>How is σ calculated?</summary>
+        <ol>
+          <li>A neural network outlines each vertebra on the X-ray.</li>
+          <li>The centre of each vertebra becomes a point, and a smooth curve is fitted through them.</li>
+          <li>Compare the curve's true length <code>s</code> with the straight line between its ends <code>d</code>.</li>
+        </ol>
+        <p style="margin:8px 0 0"><code>σ = (1 − d / s)²</code> — a straight spine gives 0, and σ grows as the curve bends.</p>
+      </details>
+
+      <p class="footnote">Arc length and chord are measured in pixels of the 512×512 resized image (PNG/JPEG carries no pixel spacing). Est. Cobb's angle is the change in tangent angle along the middle 80% of the fitted curve — approximate and unvalidated. Severity bands were matched to a mask-derived Cobb proxy on a scoliosis-only dataset.</p>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const dropzone=$('dropzone'), fileInput=$('fileInput'), viewport=$('viewport'), preview=$('preview'),
+        fileRow=$('fileRow'), fname=$('fname'), replaceBtn=$('replaceBtn'), overlayBtn=$('overlayBtn'),
+        downloadBtn=$('downloadBtn'), statusDot=$('statusDot'), statusText=$('statusText'),
+        badge=$('severityBadge'), banner=$('banner'), analyzing=$('analyzing'),
+        pointer=$('scalePointer'), scaleValue=$('scaleValue');
+  const keys = ['sigma','s','d','cobb','n','ratio'];
+  const cards = Object.fromEntries(keys.map(k => [k, $('card-'+k)]));
+  const vals  = Object.fromEntries(keys.map(k => [k, $('val-'+k)]));
+
+  const DEFAULT_CUTS = [0.0019, 0.0186, 0.0393];
+  const SCALE_TOP = 0.08;
+  const API = location.protocol === 'file:' ? 'http://localhost:8000' : '';
+  let runId = 0, lastResult = null, overlaySvg = null, overlayOn = true;
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('keydown', e => { if(e.key==='Enter'||e.key===' '){ e.preventDefault(); fileInput.click(); } });
+  replaceBtn.addEventListener('click', () => fileInput.click());
+  ['dragover','dragenter'].forEach(evt => dropzone.addEventListener(evt, e => { e.preventDefault(); dropzone.classList.add('drag'); }));
+  ['dragleave','drop'].forEach(evt => dropzone.addEventListener(evt, e => { e.preventDefault(); dropzone.classList.remove('drag'); }));
+  dropzone.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if(f) handleFile(f); });
+  fileInput.addEventListener('change', e => { const f = e.target.files[0]; if(f) handleFile(f); });
+  overlayBtn.addEventListener('click', toggleOverlay);
+  downloadBtn.addEventListener('click', downloadResult);
+  window.addEventListener('resize', () => { if(lastResult) drawOverlay(lastResult); });
+
+  function setStatus(kind, text){ statusDot.className = 'status-dot ' + kind; statusText.textContent = text; }
+
+  function resetResults(){
+    Object.values(cards).forEach(c => c.classList.add('empty'));
+    Object.values(vals).forEach(v => v.textContent = '—');
+    badge.style.display = 'none';
+    banner.classList.remove('show');
+    pointer.style.display = 'none';
+    scaleValue.textContent = '—';
+    overlayBtn.disabled = true; downloadBtn.disabled = true;
+    lastResult = null;
+    if(overlaySvg){ overlaySvg.remove(); overlaySvg = null; }
+  }
+
+  function handleFile(file){
+    const reader = new FileReader();
+    reader.onload = e => {
+      preview.src = e.target.result;
+      dropzone.style.display = 'none';
+      viewport.classList.add('show');
+      fileRow.style.display = 'flex';
+      fname.textContent = file.name;
+      $('fileLine').title = file.name;
+      resetResults();
+      analyzing.classList.add('show');
+      setStatus('active', 'Analyzing…');
+      runAnalysis(file);
+    };
+    reader.readAsDataURL(file);
+    fileInput.value = '';
+  }
+
+  async function runAnalysis(file){
+    const myRun = ++runId;
+    try{
+      const fd = new FormData(); fd.append('file', file);
+      const res = await fetch(API + '/analyze', { method:'POST', body: fd });
+      if(!res.ok){
+        let msg = 'Analysis failed';
+        try{ msg = (await res.json()).detail || msg; }catch(_){}
+        throw new Error(msg);
+      }
+      const data = await res.json();
+      if(myRun !== runId) return;
+      showResults(data);
+    }catch(err){
+      if(myRun !== runId) return;
+      analyzing.classList.remove('show');
+      setStatus('error', err instanceof TypeError ? 'Backend offline — start the server' : err.message);
+    }
+  }
+
+  function showResults(r){
+    const cuts = r.sigma_cuts || DEFAULT_CUTS;
+    analyzing.classList.remove('show');
+
+    vals.sigma.textContent = r.sigma.toFixed(4);
+    vals.cobb.textContent  = r.cobb_estimate_deg.toFixed(1);
+    vals.s.textContent     = r.arc_length_px.toFixed(1);
+    vals.d.textContent     = r.chord_px.toFixed(1);
+    vals.ratio.textContent = (r.chord_px / r.arc_length_px).toFixed(3);
+    vals.n.textContent     = r.n_vertebrae_detected;
+    Object.values(cards).forEach(c => c.classList.remove('empty'));
+
+    badge.className = 'badge ' + r.severity_band.toLowerCase();
+    badge.textContent = r.severity_band;
+    badge.style.display = 'inline-block';
+
+    const low = r.confidence === 'low';
+    if(low){
+      banner.innerHTML = '<strong>Low confidence.</strong> ' + (r.warnings || []).join(' ') +
+                         ' Check that the curve follows the spine before trusting these values.';
+      banner.classList.add('show');
+    }
+
+    placePointer(r.sigma, cuts);
+    drawOverlay(r);
+    overlayBtn.disabled = false; downloadBtn.disabled = false;
+    setStatus(low ? 'active' : 'ready', low ? 'Complete — low confidence' : 'Analysis complete');
+  }
+
+  function placePointer(sig, cuts){
+    const edges = [0, ...cuts, SCALE_TOP];
+    let i = 0; while(i < 3 && sig >= edges[i+1]) i++;
+    const t = Math.min(1, Math.max(0, (sig - edges[i]) / (edges[i+1] - edges[i])));
+    pointer.style.left = ((i + t) / 4 * 100) + '%';
+    pointer.style.display = 'block';
+    scaleValue.textContent = 'σ = ' + sig.toFixed(4);
+    cuts.forEach((c, k) => { $('tick' + (k+1)).textContent = c; });
+  }
+
+  function drawOverlay(r){
+    lastResult = r;
+    if(overlaySvg) overlaySvg.remove();
+    const NS = 'http://www.w3.org/2000/svg';
+    const W = r.image_size.width, H = r.image_size.height;
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.setAttribute('preserveAspectRatio', 'none');
+    svg.style.cssText = `position:absolute;left:${preview.offsetLeft}px;top:${preview.offsetTop}px;` +
+      `width:${preview.clientWidth}px;height:${preview.clientHeight}px;pointer-events:none;` +
+      `display:${overlayOn ? 'block' : 'none'};`;
+    const path = document.createElementNS(NS, 'path');
+    path.setAttribute('d', r.curve.map((p, i) => (i ? 'L' : 'M') + p[0] + ' ' + p[1]).join(' '));
+    path.setAttribute('fill', 'none'); path.setAttribute('stroke', '#22D3EE');
+    path.setAttribute('stroke-width', Math.max(2, W / 200));
+    path.setAttribute('stroke-linecap', 'round'); path.setAttribute('stroke-linejoin', 'round');
+    svg.appendChild(path);
+    r.centroids.forEach(p => {
+      const c = document.createElementNS(NS, 'circle');
+      c.setAttribute('cx', p[0]); c.setAttribute('cy', p[1]);
+      c.setAttribute('r', Math.max(3, W / 150)); c.setAttribute('fill', '#FACC15');
+      svg.appendChild(c);
+    });
+    viewport.appendChild(svg);
+    overlaySvg = svg;
+  }
+
+  function toggleOverlay(){
+    overlayOn = !overlayOn;
+    if(overlaySvg) overlaySvg.style.display = overlayOn ? 'block' : 'none';
+    overlayBtn.textContent = overlayOn ? 'Hide overlay' : 'Show overlay';
+  }
+
+  function downloadResult(){
+    if(!lastResult) return;
+    const r = lastResult, W = preview.naturalWidth, H = preview.naturalHeight;
+    const bar = Math.max(70, Math.round(H * 0.09));
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H + bar;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#14181C'; ctx.fillRect(0, 0, W, H + bar);
+    ctx.filter = 'grayscale(1) contrast(1.05)'; ctx.drawImage(preview, 0, 0, W, H); ctx.filter = 'none';
+    const sx = W / r.image_size.width, sy = H / r.image_size.height;
+    ctx.strokeStyle = '#22D3EE'; ctx.lineWidth = Math.max(2, W / 200); ctx.lineJoin = ctx.lineCap = 'round';
+    ctx.beginPath();
+    r.curve.forEach((p, i) => i ? ctx.lineTo(p[0]*sx, p[1]*sy) : ctx.moveTo(p[0]*sx, p[1]*sy));
+    ctx.stroke();
+    ctx.fillStyle = '#FACC15';
+    r.centroids.forEach(p => { ctx.beginPath(); ctx.arc(p[0]*sx, p[1]*sy, Math.max(3, W/150), 0, 7); ctx.fill(); });
+    ctx.fillStyle = '#fff'; ctx.font = `600 ${Math.round(bar*0.34)}px sans-serif`;
+    ctx.fillText(`σ ${r.sigma.toFixed(4)} · ${r.severity_band} · ${r.n_vertebrae_detected} vertebrae` +
+                 (r.confidence === 'low' ? ' · LOW CONFIDENCE' : ''), 16, H + bar*0.46);
+    ctx.fillStyle = '#98A5B3'; ctx.font = `${Math.round(bar*0.24)}px sans-serif`;
+    ctx.fillText('SpineMetric research prototype — not for diagnosis', 16, H + bar*0.82);
+    cv.toBlob(b => {
+      const a = document.createElement('a'); a.href = URL.createObjectURL(b);
+      a.download = 'spinemetric_result.png'; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    });
+  }
+</script>
+
+</body>
+</html>
